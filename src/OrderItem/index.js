@@ -1,10 +1,18 @@
+import { useEffect, useState } from "react";
 import { Text, View, Image, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import styles from "./styles";
 import { useNavigation } from "@react-navigation/native";
+import { DataStore } from "aws-amplify";
+import { User } from "../models";
 
 const OrderItem = ({ order }) => {
+  const [user, setUser] = useState(null);
   const navigation = useNavigation();
+
+  useEffect(() => {
+    DataStore.query(User, order.userID).then(setUser);
+  }, []);
 
   return (
     <Pressable
@@ -18,8 +26,8 @@ const OrderItem = ({ order }) => {
         <Text style={styles.restaurantName}>{order.Restaurant.name}</Text>
         <Text style={styles.texts}>{order.Restaurant.address}</Text>
         <Text style={styles.deliveryTitle}>Delivery Details:</Text>
-        <Text style={styles.texts}>{order.User.name}</Text>
-        <Text style={styles.texts}>{order.User.address}</Text>
+        <Text style={styles.texts}>{user?.name}</Text>
+        <Text style={styles.texts}>{user?.address}</Text>
       </View>
       <View style={styles.iconContainer}>
         <Ionicons

@@ -7,44 +7,45 @@ import {
   ActivityIndicator,
   Pressable,
 } from "react-native";
-import BottomSheet from "@gorhom/bottom-sheet";
+import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import {
   MaterialIcons,
   FontAwesome5,
   Ionicons,
   Entypo,
 } from "@expo/vector-icons";
-import orders from "../../../assets/data/orders.json";
 import styles from "./styles";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import MapViewDirections from "react-native-maps-directions";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { DataStore } from "aws-amplify";
+import { Order, OrderDish, User } from "../../models";
+import { useOrderContext } from "../../contexts/OrderContext";
 
-const order = orders[0];
-
-const restaurantLocation = {
-  latitude: order.Restaurant.lat,
-  longitude: order.Restaurant.lng,
-};
-const deliveryLocation = {
-  latitude: order.User.lat,
-  longitude: order.User.lng,
-};
-
-const ORDER_STATUSES = {
-  READY_FOR_PICKUP: "READY_FOR_PICKUP",
-  ACCEPTED: "ACCEPTED",
-  PICKED_UP: "PICKED_UP",
-};
+// const ORDER_STATUSES = {
+//   READY_FOR_PICKUP: "READY_FOR_PICKUP",
+//   ACCEPTED: "ACCEPTED",
+//   PICKED_UP: "PICKED_UP",
+// };
 
 const OrderDelivery = () => {
+  const {
+    order,
+    user,
+    dishes,
+    acceptOrder,
+    fetchOrder,
+    pickUpOrder,
+    completeOrder,
+  } = useOrderContext();
+
   const [driverLocation, setDriverLocation] = useState(null);
   const [totalMinutes, setTotalMinutes] = useState(0);
   const [totalKm, setTotalKm] = useState(0);
-  const [deliveryStatus, setDeliveryStatus] = useState(
-    ORDER_STATUSES.READY_FOR_PICKUP
-  );
+  // const [deliveryStatus, setDeliveryStatus] = useState(
+  //   ORDER_STATUSES.READY_FOR_PICKUP
+  // );
   const [isDriverClose, setIsDriverClose] = useState(false);
 
   const bottomSheetRef = useRef(null);
@@ -56,6 +57,28 @@ const OrderDelivery = () => {
   const snapPoints = useMemo(() => ["12%", "95%"], []);
 
   const navigation = useNavigation();
+  const route = useRoute();
+  const id = route.params?.id;
+
+  useEffect(() => {
+    fetchOrder(id);
+
+    // if (!id) {
+    //   return;
+    // }
+    // DataStore.query(Order, id).then(setOrder);
+  }, [id]);
+
+  // useEffect(() => {
+  //   if (!order) {
+  //     return;
+  //   }
+  //   DataStore.query(User, order.userID).then(setUser);
+
+  //   DataStore.query(OrderDish, (od) => od.orderID("eq", order.id)).then(
+  //     setDishItems
+  //   );
+  // }, [order]);
 
   useEffect(() => {
     const getDeliveryLocations = async () => {
@@ -89,12 +112,8 @@ const OrderDelivery = () => {
     return foregroundSubscription;
   }, []);
 
-  if (!driverLocation) {
-    return <ActivityIndicator size={"large"} />;
-  }
-
-  const onButtonPressed = () => {
-    if (deliveryStatus === ORDER_STATUSES.READY_FOR_PICKUP) {
+  const onButtonPressed = async () => {
+    if (order.status === "READY_FOR_PICKUP") {
       bottomSheetRef.current?.collapse();
       mapRef.current.animateToRegion({
         latitude: driverLocation.latitude,
@@ -103,43 +122,59 @@ const OrderDelivery = () => {
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
       });
-      setDeliveryStatus(ORDER_STATUSES.ACCEPTED);
+      acceptOrder();
     }
-    if (deliveryStatus === ORDER_STATUSES.ACCEPTED) {
+    if (order.status === "ACCEPTED") {
       bottomSheetRef.current?.collapse();
-      setDeliveryStatus(ORDER_STATUSES.PICKED_UP);
+      pickUpOrder();
     }
-    if (deliveryStatus === ORDER_STATUSES.PICKED_UP) {
+    if (order.status === "PICKED_UP") {
+      await completeOrder();
       bottomSheetRef.current?.collapse();
       navigation.goBack();
-      console.warn("Delivery Completed");
+      // console.warn("Delivery Completed");
     }
   };
 
   const renderButtonTitle = () => {
-    if (deliveryStatus === ORDER_STATUSES.READY_FOR_PICKUP) {
+    if (order.status === "READY_FOR_PICKUP") {
       return "Accept Order";
     }
-    if (deliveryStatus === ORDER_STATUSES.ACCEPTED) {
+    if (order.status === "ACCEPTED") {
       return "Pick-Up Order";
     }
-    if (deliveryStatus === ORDER_STATUSES.PICKED_UP) {
+    if (order.status === "PICKED_UP") {
       return "Completed Delivery";
     }
   };
 
   const isButtonDisabled = () => {
-    if (deliveryStatus === ORDER_STATUSES.READY_FOR_PICKUP) {
+    if (order.status === "READY_FOR_PICKUP") {
       return false;
     }
-    if (deliveryStatus === ORDER_STATUSES.ACCEPTED && isDriverClose) {
+    if (order.status === "ACCEPTED" && isDriverClose) {
       return false;
     }
-    if (deliveryStatus === ORDER_STATUSES.PICKED_UP && isDriverClose) {
+    if (order.status === "PICKED_UP" && isDriverClose) {
       return false;
     }
     return true;
   };
+
+  const restaurantLocation = {
+    latitude: order?.Restaurant?.lat,
+    longitude: order?.Restaurant?.lng,
+  };
+  const deliveryLocation = {
+    latitude: user?.lat,
+    longitude: user?.lng,
+  };
+
+  if (!order || !user || !driverLocation) {
+    return <ActivityIndicator size={"large"} color="gray" />;
+  }
+
+  // console.log("dishItems are: ", dishItems);
 
   return (
     <View style={styles.rootContainer}>
@@ -161,15 +196,11 @@ const OrderDelivery = () => {
         <MapViewDirections
           origin={driverLocation}
           destination={
-            deliveryStatus === ORDER_STATUSES.ACCEPTED
-              ? restaurantLocation
-              : deliveryLocation
+            order.status === "ACCEPTED" ? restaurantLocation : deliveryLocation
           }
           strokeWidth={5}
           waypoints={
-            deliveryStatus === ORDER_STATUSES.READY_FOR_PICKUP
-              ? [restaurantLocation]
-              : []
+            order.status === "READY_FOR_PICKUP" ? [restaurantLocation] : []
           }
           strokeColor="#e6404d"
           apikey={"AIzaSyBkwzebsS2WZ7om72e-WJ017ZmsHdKR68o"}
@@ -196,27 +227,25 @@ const OrderDelivery = () => {
 
         {/* user marker */}
         <Marker
-          key={"user " + order.id}
-          title={order.User.name}
-          description={order.User.address}
-          coordinate={{
-            latitude: order.User.lat,
-            longitude: order.User.lng,
-          }}
+          // key={"user " + order.id}
+          title={user?.name}
+          description={user?.address}
+          coordinate={deliveryLocation}
         >
           <View style={styles.markerIcon}>
             <Ionicons name="person" size={22} color="white" />
           </View>
         </Marker>
       </MapView>
-
-      <Ionicons
-        onPress={() => navigation.goBack()}
-        name="caret-back-circle-sharp"
-        size={40}
-        color="black"
-        style={styles.backIcon}
-      />
+      {order.status === "READY_FOR_PICKUP" && (
+        <Ionicons
+          onPress={() => navigation.goBack()}
+          name="caret-back-circle-sharp"
+          size={40}
+          color="black"
+          style={styles.backIcon}
+        />
+      )}
       <BottomSheet
         ref={bottomSheetRef}
         index={1}
@@ -247,14 +276,25 @@ const OrderDelivery = () => {
           </View>
           <View style={styles.midSectionRows}>
             <Ionicons name="location-sharp" size={24} color="black" />
-            <Text style={styles.restaurantInfo}>{order.User.address}</Text>
+            <Text style={styles.restaurantInfo}>{user?.address}</Text>
           </View>
 
           <View style={styles.menuItemsContainer}>
-            <Text style={styles.menuItems}>Onion Rings x 1</Text>
-            <Text style={styles.menuItems}>Big Mac x 3</Text>
-            <Text style={styles.menuItems}>Bag of Dicks x 1</Text>
-            <Text style={styles.menuItems}>Cheese from my crevice x 4</Text>
+            {dishes?.map((dishItem) => (
+              <Text style={styles.menuItems} key={dishItem.id}>
+                {dishItem.Dish.name} x {dishItem.quantity}
+              </Text>
+            ))}
+
+            {/* BottomSheetFlatList commented out because it didnt render the menu items */}
+            {/* <BottomSheetFlatList
+              data={dishItems}
+              renderItem={({ item }) => (
+                <Text style={styles.menuItems}>
+                  {item.Dish.name} x {item.quantity}
+                </Text>
+              )}
+            /> */}
           </View>
         </View>
         <Pressable
