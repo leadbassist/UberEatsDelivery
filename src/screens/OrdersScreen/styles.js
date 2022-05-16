@@ -24,9 +24,4 @@ export default StyleSheet.create({
     width: "25%",
     marginTop: 10,
   },
-  markerIcon: {
-    backgroundColor: "red",
-    padding: 5,
-    borderRadius: 20,
-  },
 });

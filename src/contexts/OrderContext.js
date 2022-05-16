@@ -26,6 +26,24 @@ const OrderContextProvider = ({ children }) => {
     );
   };
 
+  useEffect(() => {
+    if (!order) {
+      return;
+    }
+
+    const subscription = DataStore.observe(Order, order.id).subscribe(
+      ({ opType, element }) => {
+        if (opType === "UPDATE") {
+          // console.log("order has been updated", element);
+          // setOrder((existingOrder) => ({ ...existingOrder, ...element }));
+          fetchOrder(element.id);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, [order?.id]);
+
   const acceptOrder = () => {
     // update the order, change STATUS, and assign the transporter
     DataStore.save(
@@ -44,12 +62,13 @@ const OrderContextProvider = ({ children }) => {
     ).then(setOrder);
   };
 
-  const completeOrder = () => {
-    DataStore.save(
+  const completeOrder = async () => {
+    const updatedOrder = await DataStore.save(
       Order.copyOf(order, (updated) => {
         updated.status = "COMPLETED";
       })
-    ).then(setOrder);
+    );
+    setOrder(updatedOrder);
   };
   return (
     <OrderContext.Provider

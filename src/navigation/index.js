@@ -3,11 +3,17 @@ import OrdersScreen from "../screens/OrdersScreen";
 import OrdersDelivery from "../screens/OrderDelivery";
 import ProfileScreen from "../screens/ProfileScreen";
 import { useAuthContext } from "../contexts/AuthContext";
+import { ActivityIndicator } from "react-native";
 
 const Stack = createNativeStackNavigator();
 
 const Navigation = () => {
-  const { dbTransporter } = useAuthContext();
+  const { dbTransporter, loading } = useAuthContext();
+
+  if (loading) {
+    return <ActivityIndicator size={"large"} color="gray" />;
+  }
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {dbTransporter ? (
